@@ -34,6 +34,21 @@ export async function getMonthConversations(
 }
 
 /**
+ * Increment the monthly conversation count for a host.
+ * Only called for Starter hosts when isNew === true from getOrCreateConversation.
+ * No-op for Pro/Agency/Enterprise.
+ */
+export async function incrementMonthConversations(hostId: string): Promise<void> {
+  // This is a read-increment pattern against the live DB.
+  // The getMonthConversations function always queries live data,
+  // so no explicit increment is needed — the new conversation row
+  // created by getOrCreateConversation is immediately reflected.
+  // This function exists as a hook for future Redis integration.
+  // For now it's intentionally a no-op (the DB count is the source of truth).
+  void hostId;
+}
+
+/**
  * Check if a Starter host is at or over their monthly cap.
  * Returns { allowed, count, approaching } where approaching = count >= 160 (80%).
  */
