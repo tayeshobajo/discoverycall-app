@@ -17,6 +17,7 @@ import { EXTRACTION_SYSTEM_PROMPT } from './system-prompt';
 import { mergeProfileUpdates, updateVisitorProfile } from './visitor';
 import { shouldSummarize } from './history';
 import { regenerateHistorySummary } from './summarize';
+import { sendReport } from '@/lib/email/reports';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -179,7 +180,7 @@ export async function extractAndScore(
       .eq('id', conversationId);
 
     // Check report triggers
-    await checkReportTriggers(conversationId, conversation.host_id, extracted, visitor);
+    await checkReportTriggers(conversationId, conversation.host_id, extracted, visitor, conversation);
 
     // Summarization trigger: fires at message 40, then every 20 (60, 80...)
     const currentCount = conversation.message_count;
@@ -216,12 +217,24 @@ async function checkReportTriggers(
   conversationId: string,
   hostId: string,
   extracted: ExtractionResult,
-  visitor: Database['public']['Tables']['visitors']['Row']
+  visitor: Database['public']['Tables']['visitors']['Row'],
+  conversation: Database['public']['Tables']['conversations']['Row']
 ): Promise<void> {
   // Hot lead: intent >= 70 AND email captured
   const hasEmail = !!visitor.email || !!extracted.profile_updates?.email;
   if (extracted.intent_score >= 70 && hasEmail) {
     await sendReportIfNotSent(conversationId, hostId, 'hot_lead');
+  }
+
+  // Long conversation: 50+ messages
+  if (conversation.message_count >= 50) {
+    await sendReportIfNotSent(conversationId, hostId, 'long_conversation');
+  }
+
+  // Long conversation: 30+ minutes duration
+  const durationMinutes = (Date.now() - new Date(conversation.started_at).getTime()) / 60000;
+  if (durationMinutes >= 30) {
+    await sendReportIfNotSent(conversationId, hostId, 'long_conversation');
   }
 }
 
@@ -247,20 +260,8 @@ async function sendReportIfNotSent(
 
   if (existing) return;
 
-  // TODO Sprint 4: implement full Resend email templates
-  // For Sprint 3: log the trigger and record the event
-  console.log(`[extract] Report trigger: ${type} for conversation ${conversationId}`);
-
-  await supabase.from('events').insert({
-    host_id: hostId,
-    conversation_id: conversationId,
-    event_type: eventType,
-    event_data: {
-      type,
-      triggered_at: new Date().toISOString(),
-      triggered_by: 'extraction_pipeline',
-    },
-  });
+  // Send via Resend — sendReport handles idempotency internally as well
+  await sendReport(conversationId, type);
 }
 
 /**

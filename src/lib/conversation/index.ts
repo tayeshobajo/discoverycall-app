@@ -330,23 +330,10 @@ export async function markConversationCompleted(
     .single();
 
   if (conversation) {
-    const eventType = 'report_sent_completed';
-
-    const { data: existing } = await supabase
-      .from('events')
-      .select('id')
-      .eq('conversation_id', conversationId)
-      .eq('event_type', eventType)
-      .limit(1)
-      .maybeSingle();
-
-    if (!existing) {
-      await supabase.from('events').insert({
-        host_id: conversation.host_id,
-        conversation_id: conversationId,
-        event_type: eventType,
-        event_data: { reason, triggered_at: new Date().toISOString() },
-      });
-    }
+    // Send completed report — sendReport handles idempotency
+    const { sendReport } = await import('@/lib/email/reports');
+    sendReport(conversationId, 'completed').catch((err) => {
+      console.error('[markConversationCompleted] Report send failed:', err);
+    });
   }
 }

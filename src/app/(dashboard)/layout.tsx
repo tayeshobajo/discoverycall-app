@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import DashboardSidebar from '@/components/dashboard/Sidebar';
 import DashboardHeader from '@/components/dashboard/Header';
+import TrialBanner from '@/components/dashboard/TrialBanner';
 
 export default async function DashboardLayout({
   children,
@@ -30,6 +31,7 @@ export default async function DashboardLayout({
       <DashboardSidebar host={host} />
       <div className="flex flex-col flex-1 overflow-hidden">
         <DashboardHeader user={user} host={host} />
+        <TrialBanner host={host} />
         <main className="flex-1 overflow-auto p-6">
           {children}
         </main>

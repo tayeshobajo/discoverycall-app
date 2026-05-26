@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/trial-transitions",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-reports",
+      "schedule": "0 9 * * 1"
+    },
+    {
+      "path": "/api/cron/complete-conversations",
+      "schedule": "*/10 * * * *"
     }
   ],
   "headers": [

@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { toast } from 'sonner';
 import type { Host, OnboardingStep } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Bot, Globe, FileText, Palette, Code2, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Bot, Globe, FileText, Palette, Code2, CheckCircle2, ArrowRight, Copy } from 'lucide-react';
 
 const STEPS = [
   { id: 'welcome', label: 'Welcome', icon: Bot },
@@ -29,6 +30,7 @@ export default function OnboardingFlow({ host }: OnboardingFlowProps) {
   const [stepIndex, setStepIndex] = useState(currentStepIndex);
 
   const currentStep = STEPS[stepIndex];
+  const [agentEmbedToken, setAgentEmbedToken] = useState<string | null>(null);
 
   const updateStep = async (step: OnboardingStep) => {
     await supabase.from('hosts').update({ onboarding_step: step }).eq('id', host.id);
@@ -70,10 +72,18 @@ export default function OnboardingFlow({ host }: OnboardingFlowProps) {
       .single();
 
     if (agent) {
+      setAgentEmbedToken(agent.embed_token);
       await supabase.from('agent_config').insert({ agent_id: agent.id });
       await updateStep('build_agent');
       router.push(`/agents/${agent.id}/playbook?onboarding=1`);
     }
+  };
+
+  const copyEmbedCode = async () => {
+    if (!agentEmbedToken) return;
+    const code = `<script src="https://embed.discoverycall.ai/loader.js" data-token="${agentEmbedToken}" async></script>`;
+    await navigator.clipboard.writeText(code);
+    toast.success('Embed code copied!');
   };
 
   const stepProgress = ((stepIndex) / (STEPS.length - 1)) * 100;
@@ -197,25 +207,39 @@ export default function OnboardingFlow({ host }: OnboardingFlowProps) {
                   </p>
                 </CardContent>
               </Card>
-              <div className="flex items-center gap-4">
-                <Button
-                  onClick={() => {
-                    // TODO: Trigger Google OAuth
-                    advance();
-                  }}
-                  className="bg-[#1783F1] hover:bg-[#1468C8] px-8"
-                  size="lg"
-                >
-                  <Globe className="w-4 h-4 mr-2" />
-                  Connect Google →
-                </Button>
-                <button
-                  onClick={advance}
-                  className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  Skip for now
-                </button>
-              </div>
+              {host.google_auth_status === 'connected' ? (
+                <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                    <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-green-800">Google connected</p>
+                    <p className="text-xs text-green-600">{host.google_account_email}</p>
+                  </div>
+                  <Button onClick={advance} className="ml-auto bg-green-600 hover:bg-green-700">
+                    Continue →
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-4">
+                  <Button
+                    onClick={() => {
+                      window.location.href = `/api/google/connect?onboarding=1`;
+                    }}
+                    className="bg-[#1783F1] hover:bg-[#1468C8] px-8"
+                    size="lg"
+                  >
+                    <Globe className="w-4 h-4 mr-2" />
+                    Connect Google →
+                  </Button>
+                  <button
+                    onClick={advance}
+                    className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    Skip for now
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -296,19 +320,35 @@ export default function OnboardingFlow({ host }: OnboardingFlowProps) {
             <div className="space-y-8">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 mb-3">Last step. Drop one line of code.</h1>
-                <p className="text-gray-500">Add this to your site&apos;s <code>&lt;head&gt;</code> or before the closing <code>&lt;/body&gt;</code>.</p>
+                <p className="text-gray-500">Add this to your site before the closing <code>&lt;/body&gt;</code> tag.</p>
               </div>
               <Card>
                 <CardContent className="pt-6">
-                  <div className="bg-gray-900 rounded-lg p-4 font-mono text-xs text-green-400">
-                    {`<!-- DiscoveryCall Widget -->`}<br />
-                    {`<script src="https://embed.discoverycall.ai/loader.js"`}<br />
-                    {`  data-token="YOUR_EMBED_TOKEN"`}<br />
-                    {`  async></script>`}
+                  <div
+                    className="bg-gray-900 rounded-lg p-4 font-mono text-xs text-green-400 cursor-pointer group relative"
+                    onClick={copyEmbedCode}
+                  >
+                    <div>{`<!-- DiscoveryCall Widget -->`}</div>
+                    <div>{`<script src="https://embed.discoverycall.ai/loader.js"`}</div>
+                    <div>{`  data-token="${agentEmbedToken || 'YOUR_EMBED_TOKEN'}"`}</div>
+                    <div>{`  async></script>`}</div>
+                    {agentEmbedToken && (
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-gray-400 text-xs flex items-center gap-1">
+                          <Copy className="w-3 h-3" /> Copy
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-400 mt-3">
-                    Get your embed token from your agent settings page.
-                  </p>
+                  {agentEmbedToken ? (
+                    <p className="text-xs text-green-600 mt-3 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Your actual embed token is shown above. Click to copy.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-400 mt-3">
+                      Create your agent first to get your embed token.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
               <div className="flex items-center gap-4">
