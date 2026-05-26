@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { getRedis } from '@/lib/redis';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 
@@ -22,10 +21,14 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL('/onboarding', request.url));
   }
 
-  // Generate and store state token
+  // Generate and store state token in Supabase (10-min TTL via expires_at)
   const state = crypto.randomUUID();
-  const redis = getRedis();
-  await redis.set(`google_oauth_state:${state}`, host.id, { ex: 600 }); // 10-min TTL
+  const supabaseAdmin = await createServiceClient();
+  await supabaseAdmin.from('google_oauth_states').insert({
+    state,
+    host_id: host.id,
+    expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+  });
 
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID!,

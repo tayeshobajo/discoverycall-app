@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getRedis } from '@/lib/redis';
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -14,18 +13,24 @@ export async function GET(request: Request) {
     );
   }
 
-  // Verify state token
-  const redis = getRedis();
-  const hostId = await redis.get<string>(`google_oauth_state:${state}`);
-  
-  if (!hostId) {
+  // Verify and consume state token from Supabase
+  const supabase = await createServiceClient();
+  const { data: oauthState } = await supabase
+    .from('google_oauth_states')
+    .select('host_id, expires_at')
+    .eq('state', state)
+    .maybeSingle();
+
+  if (!oauthState || new Date(oauthState.expires_at) < new Date()) {
     return NextResponse.redirect(
       `${origin}/integrations?error=invalid_state`
     );
   }
 
-  // Delete the state token
-  await redis.del(`google_oauth_state:${state}`);
+  const hostId = oauthState.host_id;
+
+  // Delete the state token (one-time use)
+  await supabase.from('google_oauth_states').delete().eq('state', state);
 
   // Exchange code for tokens
   const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
@@ -54,8 +59,6 @@ export async function GET(request: Request) {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
   });
   const userInfo = userInfoResponse.ok ? await userInfoResponse.json() : {};
-
-  const supabase = await createServiceClient();
 
   // Store tokens (access + refresh) — encrypted storage is Phase 1.5 (pgsodium setup required)
   // For Phase 1, store as plaintext bytea — implement pgsodium encryption in Sprint 2

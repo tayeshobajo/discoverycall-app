@@ -299,3 +299,82 @@ create policy messages_all on messages for all using (
 create policy lead_actions_all on lead_actions for all using (host_id in (select user_host_ids()));
 
 create policy events_select on events for select using (host_id in (select user_host_ids()));
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Google OAuth state tokens (replaces Redis TTL keys)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS google_oauth_states (
+  state       TEXT        PRIMARY KEY,
+  host_id     UUID        NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Auto-cleanup: delete expired states (runs via pg_cron or periodic API call)
+CREATE INDEX IF NOT EXISTS idx_google_oauth_states_expires ON google_oauth_states(expires_at);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Rate limit windows (replaces Upstash Redis sliding window)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS rate_limit_windows (
+  key           TEXT        NOT NULL,
+  window_start  TIMESTAMPTZ NOT NULL,
+  window_end    TIMESTAMPTZ NOT NULL,
+  count         INTEGER     NOT NULL DEFAULT 1,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (key, window_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rate_limit_key_window ON rate_limit_windows(key, window_end);
+
+-- Atomic rate limit check + increment
+-- Returns: { allowed boolean, count int, window_end timestamptz }
+CREATE OR REPLACE FUNCTION check_rate_limit(
+  p_key       TEXT,
+  p_limit     INTEGER,
+  p_window_ms BIGINT
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_now         TIMESTAMPTZ := now();
+  v_window_start TIMESTAMPTZ := v_now - (p_window_ms || ' milliseconds')::interval;
+  v_window_end   TIMESTAMPTZ := v_now + (p_window_ms || ' milliseconds')::interval;
+  v_count       INTEGER;
+BEGIN
+  -- Clean up expired windows for this key
+  DELETE FROM rate_limit_windows
+  WHERE key = p_key AND window_end < v_now;
+
+  -- Insert or increment current window
+  INSERT INTO rate_limit_windows (key, window_start, window_end, count)
+  VALUES (p_key, v_now, v_window_end, 1)
+  ON CONFLICT (key, window_start) DO UPDATE
+    SET count = rate_limit_windows.count + 1,
+        window_end = EXCLUDED.window_end;
+
+  -- Count total requests in the sliding window
+  SELECT COALESCE(SUM(count), 0) INTO v_count
+  FROM rate_limit_windows
+  WHERE key = p_key AND window_start >= v_window_start;
+
+  RETURN jsonb_build_object(
+    'allowed',     v_count <= p_limit,
+    'count',       v_count,
+    'window_end',  v_window_end
+  );
+END;
+$$;
+
+-- RLS: rate_limit_windows is internal only — no user access
+ALTER TABLE rate_limit_windows ENABLE ROW LEVEL SECURITY;
+ALTER TABLE google_oauth_states ENABLE ROW LEVEL SECURITY;
+
+-- Service role only
+CREATE POLICY "service_role_only_rate_limits" ON rate_limit_windows
+  USING (false);
+CREATE POLICY "service_role_only_oauth_states" ON google_oauth_states
+  USING (false);
