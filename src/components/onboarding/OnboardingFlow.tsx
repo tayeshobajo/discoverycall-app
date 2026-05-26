@@ -6,11 +6,11 @@ import { createClient } from '@/lib/supabase/client';
 import type { Host, OnboardingStep } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Bot, Chrome, FileText, Palette, Code2, CheckCircle2, ArrowRight, ArrowLeft, SkipForward } from 'lucide-react';
+import { Bot, Globe, FileText, Palette, Code2, CheckCircle2, ArrowRight } from 'lucide-react';
 
 const STEPS = [
   { id: 'welcome', label: 'Welcome', icon: Bot },
-  { id: 'connect_google', label: 'Connect Google', icon: Chrome },
+  { id: 'connect_google', label: 'Connect Google', icon: Globe },
   { id: 'build_agent', label: 'Build agent', icon: FileText },
   { id: 'personalize', label: 'Personalize', icon: Palette },
   { id: 'install', label: 'Install', icon: Code2 },
@@ -147,7 +147,7 @@ export default function OnboardingFlow({ host }: OnboardingFlowProps) {
               </div>
               <div className="space-y-4">
                 {[
-                  { icon: Chrome, text: "Connect your Google account (for your playbook)" },
+                  { icon: Globe, text: "Connect your Google account (for your playbook)" },
                   { icon: FileText, text: "Build your first agent (the 30-minute guided builder)" },
                   { icon: Code2, text: "Drop the embed code on your site" },
                 ].map((item, i) => {
@@ -206,7 +206,7 @@ export default function OnboardingFlow({ host }: OnboardingFlowProps) {
                   className="bg-[#1783F1] hover:bg-[#1468C8] px-8"
                   size="lg"
                 >
-                  <Chrome className="w-4 h-4 mr-2" />
+                  <Globe className="w-4 h-4 mr-2" />
                   Connect Google →
                 </Button>
                 <button
