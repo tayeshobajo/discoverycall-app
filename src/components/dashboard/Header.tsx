@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import type { Host } from '@/types/database';
@@ -14,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Settings, LogOut, User as UserIcon } from 'lucide-react';
+import { Settings, LogOut } from 'lucide-react';
 
 interface HeaderProps {
   user: User;
@@ -38,18 +37,33 @@ export default function DashboardHeader({ user, host }: HeaderProps) {
     router.refresh();
   };
 
-  // Trial expiry banner
-  const isTrialExpiring = host.trial_status === 'active' && 
+  const isTrialExpiring =
+    host.trial_status === 'active' &&
     new Date(host.trial_ends_at).getTime() - Date.now() < 3 * 24 * 60 * 60 * 1000;
+
+  const needsGoogleReauth = host.google_auth_status === 'needs_reauth';
 
   return (
     <div>
+      {needsGoogleReauth && (
+        <div className="bg-red-50 border-b border-red-200 px-6 py-2 flex items-center justify-between">
+          <p className="text-sm text-red-800">
+            <strong>Google reconnection required.</strong> Your Google account connection has expired — your agents may not respond correctly.
+          </p>
+          <a href="/api/google/connect" className="text-sm font-medium text-red-900 hover:underline">
+            Reconnect Google →
+          </a>
+        </div>
+      )}
       {isTrialExpiring && (
         <div className="bg-amber-50 border-b border-amber-200 px-6 py-2 flex items-center justify-between">
           <p className="text-sm text-amber-800">
             Your trial ends{' '}
             <strong>
-              {new Date(host.trial_ends_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              {new Date(host.trial_ends_at).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+              })}
             </strong>
             . Add a payment method to keep your agents live.
           </p>
@@ -73,7 +87,7 @@ export default function DashboardHeader({ user, host }: HeaderProps) {
           <DropdownMenuContent align="end" className="w-56">
             <div className="px-2 py-1.5">
               <p className="text-sm font-medium text-gray-900 truncate">
-                {user.user_metadata?.full_name as string || user.email}
+                {(user.user_metadata?.full_name as string) || user.email}
               </p>
               <p className="text-xs text-gray-500 truncate">{user.email}</p>
             </div>
@@ -85,7 +99,10 @@ export default function DashboardHeader({ user, host }: HeaderProps) {
               </a>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-red-600 focus:text-red-600">
+            <DropdownMenuItem
+              onClick={handleSignOut}
+              className="cursor-pointer text-red-600 focus:text-red-600"
+            >
               <LogOut className="w-4 h-4 mr-2" />
               Sign out
             </DropdownMenuItem>

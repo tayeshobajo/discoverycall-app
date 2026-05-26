@@ -5,7 +5,7 @@ export type TrialStatus = 'active' | 'expired' | 'converted' | 'cancelled';
 export type GoogleAuthState = 'never_connected' | 'connected' | 'needs_reauth' | 'disconnected';
 export type ConversationStatus = 'active' | 'idle' | 'completed' | 'abandoned' | 'error';
 export type LeadStatus = 'new' | 'contacted' | 'booked' | 'dismissed';
-export type AgentStatus = 'draft' | 'building' | 'ready' | 'paused';
+export type AgentStatus = 'draft' | 'building' | 'ready' | 'paused' | 'archived';
 export type OnboardingStep = 'welcome' | 'connect_google' | 'build_agent' | 'personalize' | 'install' | 'complete' | 'skipped';
 
 export interface PlanLimits {
